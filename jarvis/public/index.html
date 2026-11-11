@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0b1220" />
+<title>Jarvis</title>
+<style>
+  :root {
+    --bg: #0b1220; --panel: #121a2b; --panel-2: #18223a; --line: #24304d;
+    --text: #e7ecf6; --muted: #8a97b3; --accent: #4cc2ff; --accent-ink: #04202f;
+    --on: #ffd166; --ok: #4ade80; --warn: #fb923c; --bad: #f87171;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--text); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .app { display: grid; grid-template-columns: minmax(0, 1fr); height: 100dvh; max-width: 1100px; margin: 0 auto; }
+  @media (min-width: 900px) { .app { grid-template-columns: 340px minmax(0, 1fr); gap: 16px; padding: 16px; } }
+
+  header { display: flex; align-items: center; gap: 8px; padding: 14px 16px; }
+  header .actions { display: flex; gap: 6px; flex: none; }
+  .orb { width: 34px; height: 34px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #9be3ff, var(--accent) 45%, #0c4a6e); box-shadow: 0 0 18px #4cc2ff88; flex: none; }
+  .orb.thinking { animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 34px #4cc2ffcc; transform: scale(1.06); } }
+  header h1 { font-size: 20px; margin: 0; letter-spacing: .5px; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  header .spacer { flex: 1; }
+  .icon-btn { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px; white-space: nowrap; font: inherit; font-size: 14px; cursor: pointer; }
+
+  aside { display: none; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; overflow: auto; padding: 14px; }
+  aside.open { display: block; position: fixed; inset: 64px 16px 16px; z-index: 5; }
+  @media (min-width: 900px) { aside, aside.open { display: block; position: static; } #devicesBtn { display: none; } }
+  aside h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 6px 0 10px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 18px; }
+  .tile { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px; min-width: 0; }
+  .tile .name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tile .state { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .tile.on .state { color: var(--on); }
+  .tile.secure .state { color: var(--ok); }
+  .tile.insecure .state { color: var(--warn); }
+  .activity { list-style: none; padding: 0; margin: 0; font-size: 13px; color: var(--muted); }
+  .activity li { padding: 6px 0; border-top: 1px solid var(--line); }
+
+  main { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--panel); }
+  @media (min-width: 900px) { main { border: 1px solid var(--line); border-radius: 16px; } }
+  #log { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 85%; padding: 10px 14px; border-radius: 16px; white-space: pre-wrap; word-wrap: break-word; }
+  .msg.you { align-self: flex-end; background: var(--accent); color: var(--accent-ink); border-bottom-right-radius: 4px; }
+  .msg.jarvis { align-self: flex-start; background: var(--panel-2); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  .msg.error { border-color: var(--bad); color: var(--bad); }
+  .msg img { display: block; max-width: 100%; border-radius: 10px; margin-top: 6px; }
+
+  .confirm { align-self: flex-start; background: #2a1d10; border: 1px solid var(--warn); border-radius: 14px; padding: 12px; max-width: 90%; }
+  .confirm b { color: var(--warn); }
+  .confirm form { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .confirm input { width: 120px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: inherit; letter-spacing: 3px; }
+  .confirm button { border: 0; border-radius: 8px; padding: 8px 12px; font: inherit; cursor: pointer; }
+  .confirm .yes { background: var(--warn); color: #1f1206; font-weight: 600; }
+  .confirm .no { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+  .confirm .result { font-size: 14px; margin-top: 6px; }
+
+  .chips { display: flex; gap: 8px; overflow-x: auto; padding: 0 16px 10px; scrollbar-width: none; }
+  .chip { flex: none; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; font: inherit; font-size: 14px; cursor: pointer; }
+  .composer { display: flex; gap: 8px; padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+  .composer input { flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font: inherit; }
+  .composer button { border: 0; border-radius: 12px; padding: 0 16px; font: inherit; font-weight: 600; cursor: pointer; }
+  #mic { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); width: 48px; padding: 0; font-size: 20px; }
+  #mic.listening { background: var(--bad); color: #fff; }
+  #send { background: var(--accent); color: var(--accent-ink); }
+  button:disabled { opacity: .5; cursor: default; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside id="panel">
+    <h2>House</h2>
+    <div class="grid" id="devices"></div>
+    <h2>Activity</h2>
+    <ul class="activity" id="activity"></ul>
+  </aside>
+
+  <main>
+    <header>
+      <div class="orb" id="orb"></div>
+      <div>
+        <h1>Jarvis</h1>
+        <div class="sub" id="backend">Connecting…</div>
+      </div>
+      <div class="spacer"></div>
+      <div class="actions">
+        <button class="icon-btn" id="speakBtn" title="Read replies aloud">🔈</button>
+        <button class="icon-btn" id="devicesBtn">House</button>
+        <button class="icon-btn" id="resetBtn" title="Start a new conversation">New</button>
+      </div>
+    </header>
+
+    <div id="log"></div>
+
+    <div class="chips">
+      <button class="chip">Good night</button>
+      <button class="chip">I'm leaving the house</button>
+      <button class="chip">Is anyone at the front door?</button>
+      <button class="chip">Are all the doors locked?</button>
+      <button class="chip">Turn on the kitchen lights</button>
+      <button class="chip">Make it 72 degrees</button>
+    </div>
+
+    <form class="composer" id="composer">
+      <button type="button" id="mic" title="Talk to Jarvis">🎙</button>
+      <input id="input" autocomplete="off" placeholder="Tell Jarvis what to do…" />
+      <button id="send">Send</button>
+    </form>
+  </main>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const logEl = $("log"), input = $("input"), sendBtn = $("send"), orb = $("orb");
+
+let sessionId;
+try { sessionId = localStorage.getItem("jarvis-session"); } catch {}
+if (!sessionId) { sessionId = crypto.randomUUID(); try { localStorage.setItem("jarvis-session", sessionId); } catch {} }
+
+let speak = false;
+try { speak = localStorage.getItem("jarvis-speak") === "1"; } catch {}
+const updateSpeakBtn = () => {
+  $("speakBtn").textContent = speak ? "🔊" : "🔈";
+  $("speakBtn").title = speak ? "Reading replies aloud (tap to mute)" : "Read replies aloud";
+};
+updateSpeakBtn();
+$("speakBtn").onclick = () => { speak = !speak; try { localStorage.setItem("jarvis-speak", speak ? "1" : "0"); } catch {} updateSpeakBtn(); };
+
+function addMsg(text, who, extraClass = "") {
+  const div = document.createElement("div");
+  div.className = `msg ${who} ${extraClass}`;
+  div.textContent = text;
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+  return div;
+}
+
+function say(text) {
+  if (!speak || !("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  const voice = speechSynthesis.getVoices().find((v) => /en-GB/i.test(v.lang));
+  if (voice) u.voice = voice;
+  speechSynthesis.speak(u);
+}
+
+function addSnapshot(ev) {
+  const div = addMsg(`📷 ${ev.entity_id}`, "jarvis");
+  const img = document.createElement("img");
+  img.alt = `Snapshot from ${ev.entity_id}`;
+  img.src = `data:${ev.mediaType};base64,${ev.base64}`;
+  div.appendChild(img);
+}
+
+function addConfirm(ev) {
+  const box = document.createElement("div");
+  box.className = "confirm";
+  box.innerHTML = `🔐 <b></b><div>Enter your PIN to allow this.</div>
+    <form><input type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" required />
+    <button class="yes">Allow</button><button type="button" class="no">Cancel</button></form>
+    <div class="result"></div>`;
+  box.querySelector("b").textContent = ev.description;
+  const form = box.querySelector("form"), result = box.querySelector(".result");
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const pin = form.querySelector("input").value;
+    const r = await api("/api/confirm", { id: ev.id, pin });
+    if (r.ok) { form.remove(); result.textContent = "✅ " + r.message; say(r.message); refresh(); }
+    else { result.textContent = "❌ " + (r.error || "Failed"); form.querySelector("input").value = ""; }
+  };
+  box.querySelector(".no").onclick = async () => {
+    await api("/api/cancel", { id: ev.id });
+    form.remove(); result.textContent = "Cancelled.";
+  };
+  logEl.appendChild(box);
+  logEl.scrollTop = logEl.scrollHeight;
+  box.querySelector("input").focus();
+}
+
+async function api(path, body) {
+  try {
+    const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    return res.ok ? { ok: true, ...data } : { ok: false, error: data.error || `Error ${res.status}` };
+  } catch { return { ok: false, error: "Can't reach Jarvis. Is the server running?" }; }
+}
+
+async function send(text) {
+  text = text.trim();
+  if (!text) return;
+  addMsg(text, "you");
+  input.value = "";
+  sendBtn.disabled = true; orb.classList.add("thinking");
+  const r = await api("/api/chat", { sessionId, message: text });
+  sendBtn.disabled = false; orb.classList.remove("thinking");
+  if (!r.ok) { addMsg(r.error, "jarvis", "error"); return; }
+  for (const ev of r.events || []) if (ev.type === "snapshot") addSnapshot(ev);
+  addMsg(r.reply, "jarvis");
+  say(r.reply);
+  for (const ev of r.events || []) if (ev.type === "confirm") addConfirm(ev);
+  refresh();
+}
+
+$("composer").onsubmit = (e) => { e.preventDefault(); send(input.value); };
+document.querySelectorAll(".chip").forEach((c) => (c.onclick = () => send(c.textContent)));
+$("resetBtn").onclick = async () => { await api("/api/reset", { sessionId }); logEl.innerHTML = ""; greet(); };
+$("devicesBtn").onclick = () => $("panel").classList.toggle("open");
+
+// Voice input (Chrome, Edge, Safari)
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (!SR) $("mic").style.display = "none";
+else {
+  const rec = new SR();
+  rec.lang = "en-US"; rec.interimResults = true;
+  let finalText = "";
+  rec.onresult = (e) => {
+    let interim = ""; finalText = "";
+    for (const r of e.results) (r.isFinal ? (finalText += r[0].transcript) : (interim += r[0].transcript));
+    input.value = finalText || interim;
+  };
+  rec.onend = () => { $("mic").classList.remove("listening"); if (finalText) send(finalText); finalText = ""; };
+  rec.onerror = () => $("mic").classList.remove("listening");
+  $("mic").onclick = () => {
+    if ($("mic").classList.contains("listening")) return rec.stop();
+    $("mic").classList.add("listening"); rec.start();
+  };
+}
+
+const SECURE = ["locked", "closed", "armed_home", "armed_away", "armed_night"];
+const INSECURE = ["unlocked", "open", "disarmed"];
+async function refresh() {
+  try {
+    const s = await (await fetch("/api/status")).json();
+    $("backend").textContent = s.backend;
+    $("devices").innerHTML = "";
+    for (const d of s.devices) {
+      const t = document.createElement("div");
+      t.className = "tile" + (d.state === "on" ? " on" : SECURE.includes(d.state) ? " secure" : INSECURE.includes(d.state) ? " insecure" : "");
+      let state = d.state.replace(/_/g, " ");
+      if (d.attributes.brightness_pct && d.state === "on") state += ` · ${d.attributes.brightness_pct}%`;
+      if (d.attributes.temperature) state += ` · set ${d.attributes.temperature}°`;
+      if (d.attributes.current_temperature) state += ` · now ${d.attributes.current_temperature}°`;
+      t.innerHTML = `<div class="name"></div><div class="state"></div>`;
+      t.querySelector(".name").textContent = d.name;
+      t.querySelector(".state").textContent = state;
+      $("devices").appendChild(t);
+    }
+    $("activity").innerHTML = "";
+    for (const a of s.activity) {
+      const li = document.createElement("li");
+      li.textContent = `${new Date(a.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}  ${a.msg}`;
+      $("activity").appendChild(li);
+    }
+  } catch { $("backend").textContent = "Offline"; }
+}
+
+function greet() { addMsg("Good day. What can I do for the house?", "jarvis"); }
+greet();
+refresh();
+setInterval(refresh, 10000);
+</script>
+</body>
+</html>
