@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dig-Safe Dispatch</title>
+<style>
+  :root{
+    --canvas:#EEF0F3; --surface:#FFFFFF; --ink:#16181D; --muted:#646B78;
+    --line:#DDE1E6; --brand:#E8590C; --brand-soft:#FFF0E6;
+    --ok:#1F8F5F; --ok-soft:#E3F5EC; --warn:#B7791F; --warn-soft:#FDF3DC;
+    --bad:#C53030; --bad-soft:#FDE8E8; --info:#2B6CB0; --info-soft:#E6F0FA;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --canvas:#111317; --surface:#1A1D23; --ink:#ECEEF2; --muted:#9AA1AD;
+      --line:#2C313A; --brand:#FF7A33; --brand-soft:#3A2416;
+      --ok:#48BB78; --ok-soft:#183126; --warn:#ECC94B; --warn-soft:#352C14;
+      --bad:#FC8181; --bad-soft:#3B1D1D; --info:#63B3ED; --info-soft:#15283A;
+    }
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--canvas);color:var(--ink);line-height:1.45;-webkit-font-smoothing:antialiased}
+  button,input,select,textarea{font:inherit;color:inherit}
+  .wrap{max-width:1100px;margin:0 auto;padding:16px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .brand{display:flex;align-items:center;gap:10px}
+  .logo{width:36px;height:36px;border-radius:10px;background:var(--brand);color:#fff;display:grid;place-items:center;font-weight:800}
+  h1{font-size:20px;letter-spacing:-.01em}
+  .sub{font-size:12px;color:var(--muted)}
+  .btn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 14px;cursor:pointer;font-weight:600;font-size:14px}
+  .btn:hover{border-color:var(--muted)}
+  .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  .btn.go{background:var(--ok);border-color:var(--ok);color:#fff}
+  .btn.danger{color:var(--bad)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn.sm{padding:5px 10px;font-size:13px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  .tab{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer}
+  .tab.on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+  .tab .n{opacity:.65;margin-left:4px}
+
+  .layout{display:grid;grid-template-columns:340px 1fr;gap:14px;align-items:start}
+  @media (max-width:820px){.layout{grid-template-columns:1fr}.layout.detail-open .list{display:none}.layout:not(.detail-open) #detail{display:none}}
+  .list{display:flex;flex-direction:column;gap:8px}
+  .job{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;text-align:left;width:100%}
+  .job.sel{border-color:var(--brand);box-shadow:0 0 0 2px var(--brand-soft)}
+  .job .t{font-weight:650;display:flex;justify-content:space-between;gap:8px}
+  .job .m{font-size:13px;color:var(--muted);margin-top:2px}
+  .badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .badge{font-size:11px;font-weight:650;padding:2px 8px;border-radius:999px;white-space:nowrap}
+  .b-ok{background:var(--ok-soft);color:var(--ok)} .b-warn{background:var(--warn-soft);color:var(--warn)}
+  .b-bad{background:var(--bad-soft);color:var(--bad)} .b-info{background:var(--info-soft);color:var(--info)}
+  .b-mute{background:var(--canvas);color:var(--muted)}
+  .empty{color:var(--muted);text-align:center;padding:30px 10px;background:var(--surface);border:1px dashed var(--line);border-radius:12px}
+
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0}
+  .panel h2{font-size:18px}
+  .sec{border-top:1px solid var(--line);padding-top:14px;margin-top:14px}
+  .sec h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .step{width:20px;height:20px;border-radius:50%;background:var(--brand);color:#fff;font-size:11px;display:grid;place-items:center;letter-spacing:0}
+  .step.done{background:var(--ok)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+  label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:600}
+  input[type=text],input[type=date],input[type=tel],input[type=number],select,textarea{width:100%;border:1px solid var(--line);background:var(--canvas);border-radius:8px;padding:8px 10px;font-size:14px;font-weight:400;color:var(--ink)}
+  textarea{min-height:64px;resize:vertical}
+  .chk{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:14px}
+  .chk input{margin-top:3px;width:16px;height:16px;flex:0 0 auto;accent-color:var(--ok)}
+  .chk.on{background:var(--ok-soft);border-color:transparent}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);text-align:left;padding:6px}
+  td{padding:5px 6px;border-top:1px solid var(--line);vertical-align:middle}
+  .tbl{overflow-x:auto}
+
+  .gate{border-radius:12px;padding:14px;margin-top:14px}
+  .gate.blocked{background:var(--bad-soft)} .gate.ready{background:var(--ok-soft)}
+  .gate h4{font-size:15px;margin-bottom:6px}
+  .gate ul{padding-left:18px;font-size:14px}
+  .gate.blocked h4{color:var(--bad)} .gate.ready h4{color:var(--ok)}
+  .log{font-size:13px;color:var(--muted);list-style:none}
+  .log li{padding:4px 0;border-top:1px solid var(--line)}
+  .hint{font-size:12px;color:var(--muted);margin-top:4px}
+  .back{display:none}
+  @media (max-width:820px){.back{display:inline-block}}
+  dialog{border:none;border-radius:14px;padding:18px;background:var(--surface);color:var(--ink);width:min(520px,calc(100vw - 32px))}
+  dialog::backdrop{background:rgba(0,0,0,.45)}
+  @media print{
+    body{background:#fff} header,.tabs,.list,.no-print{display:none!important}
+    .layout{display:block}.panel{border:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo">⛏</div>
+      <div><h1>Dig-Safe Dispatch</h1><div class="sub">No dig plan, no dig.</div></div>
+    </div>
+    <div class="row">
+      <button class="btn sm" id="settingsBtn">Settings</button>
+      <button class="btn sm" id="exportBtn">Export</button>
+      <label class="btn sm" style="cursor:pointer">Import<input type="file" id="importFile" accept="application/json" hidden></label>
+      <button class="btn primary" id="newJobBtn">+ New job</button>
+    </div>
+  </header>
+
+  <div class="tabs" id="tabs"></div>
+  <div class="layout" id="layout">
+    <div class="list" id="list"></div>
+    <div id="detail"></div>
+  </div>
+</div>
+
+<dialog id="settingsDlg">
+  <h2 style="font-size:18px;margin-bottom:12px">Settings</h2>
+  <div class="grid">
+    <label class="f">Locate wait (business days)<input type="number" min="0" id="setWait"></label>
+    <label class="f">Ticket valid for (calendar days)<input type="number" min="1" id="setValid"></label>
+  </div>
+  <label class="f" style="margin-top:10px">Crews (one per line)<textarea id="setCrews"></textarea></label>
+  <label class="f" style="margin-top:10px">Default utilities to notify (one per line)<textarea id="setUtils"></textarea></label>
+  <p class="hint">Wait and validity periods vary by state/region — set them to match your local one-call / Before You Dig rules.</p>
+  <div class="row" style="justify-content:flex-end;margin-top:14px">
+    <button class="btn" id="setCancel">Cancel</button>
+    <button class="btn primary" id="setSave">Save</button>
+  </div>
+</dialog>
+
+<script>
+(function(){
+  "use strict";
+  var KEY = "digsafe-dispatch.v1";
+  var STATUS = { new:"New", dispatched:"Dispatched", progress:"In progress", done:"Complete", cancelled:"Cancelled" };
+  var UTIL_STATUS = ["Pending","Marked","Clear / no conflict","Conflict — see notes"];
+  var SAFETY = [
+    ["whiteLined","Dig area pre-marked (white-lined) on site"],
+    ["marksVerified","Locate marks / flags verified on site and match the plans"],
+    ["plansOnSite","Utility plans/maps printed or available on site"],
+    ["toleranceZone","Hand-dig / vacuum-excavate within tolerance zone of marked lines"],
+    ["potholed","Crossings potholed to confirm depth before machine digging"],
+    ["crewBriefed","Crew briefed on marked utilities and dig plan (toolbox talk)"],
+    ["emergencyPlan","Emergency contacts and gas-strike procedure reviewed"]
+  ];
+  var defaults = {
+    settings:{ waitDays:2, validDays:28,
+      crews:["Crew A","Crew B","Crew C"],
+      utilities:["Electric","Gas","Water","Sewer / Stormwater","Telecom / Fibre","Cable TV"] },
+    jobs:[]
+  };
+
+  var db = load();
+  var ui = { filter:"all", sel:null };
+
+  function load(){
+    try{
+      var raw = localStorage.getItem(KEY);
+      if(raw){ var d = JSON.parse(raw); if(d && d.jobs && d.settings) return d; }
+    }catch(e){}
+    return JSON.parse(JSON.stringify(defaults));
+  }
+  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){} }
+
+  // ---------- dates ----------
+  function today(){ var d=new Date(); d.setHours(0,0,0,0); return d; }
+  function parse(s){ if(!s) return null; var p=s.split("-"); return new Date(+p[0],+p[1]-1,+p[2]); }
+  function iso(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+  function addBiz(d,n){ var r=new Date(d); while(n>0){ r.setDate(r.getDate()+1); var w=r.getDay(); if(w!==0&&w!==6) n--; } return r; }
+  function addDays(d,n){ var r=new Date(d); r.setDate(r.getDate()+n); return r; }
+  function fmt(d){ return d ? d.toLocaleDateString(undefined,{weekday:"short",day:"numeric",month:"short"}) : "—"; }
+  function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
+
+  // ---------- model ----------
+  function newJob(){
+    var u = db.settings.utilities.map(function(n){ return {id:uid(),name:n,status:"Pending",ref:"",notes:""}; });
+    return {
+      id:uid(), num:"J-"+String(db.jobs.length+1001), created:new Date().toISOString(),
+      status:"new", customer:"", phone:"", address:"", crew:"", date:"", work:"",
+      excavation:true, depth:"", equipment:"Excavator",
+      dbyd:{ ticket:"", requested:"", readyOverride:"", expiresOverride:"", digArea:"",
+             utilities:u, safety:{}, notes:"", supervisor:"", signedAt:"" },
+      log:[{at:new Date().toISOString(),msg:"Job created"}]
+    };
+  }
+  function job(id){ return db.jobs.find(function(j){return j.id===id;}); }
+  function logIt(j,msg){ j.log.unshift({at:new Date().toISOString(),msg:msg}); }
+
+  function readyDate(j){
+    var d=j.dbyd;
+    if(d.readyOverride) return parse(d.readyOverride);
+    var r=parse(d.requested); return r ? addBiz(r, +db.settings.waitDays||0) : null;
+  }
+  function expiryDate(j){
+    var d=j.dbyd;
+    if(d.expiresOverride) return parse(d.expiresOverride);
+    var r=parse(d.requested); return r ? addDays(r, +db.settings.validDays||28) : null;
+  }
+
+  // Returns {blockers:[...], warnings:[...], steps:{ticket,utilities,safety,signoff}}
+  function check(j){
+    var b=[], w=[], d=j.dbyd, t=today();
+    var steps={ticket:false,utilities:false,safety:false,signoff:false};
+    if(!j.excavation){ return {blockers:[],warnings:[],steps:{ticket:true,utilities:true,safety:true,signoff:true},na:true}; }
+    if(!d.ticket.trim()) b.push("Enter the Dial Before You Dig / locate ticket number");
+    if(!d.requested) b.push("Enter the date the locate was requested");
+    if(!d.digArea.trim()) b.push("Describe the dig area / excavation footprint");
+    var rd=readyDate(j), ex=expiryDate(j);
+    if(rd && t<rd) b.push("Locate wait period not over — earliest legal dig date is "+fmt(rd));
+    if(ex && t>ex) b.push("Locate ticket expired on "+fmt(ex)+" — request a renewal");
+    else if(ex && (ex-t)/864e5<=3) w.push("Ticket expires soon ("+fmt(ex)+")");
+    if(j.date && ex && parse(j.date)>ex) w.push("Scheduled date is after ticket expiry");
+    if(j.date && rd && parse(j.date)<rd) w.push("Scheduled date is before the locate ready date");
+    steps.ticket = !!(d.ticket.trim() && d.requested && d.digArea.trim() && (!rd||t>=rd) && (!ex||t<=ex));
+
+    if(!d.utilities.length) b.push("Add at least one utility owner to notify");
+    var pend=d.utilities.filter(function(u){return u.status==="Pending";});
+    if(pend.length) b.push("Waiting on response from: "+pend.map(function(u){return u.name;}).join(", "));
+    var conf=d.utilities.filter(function(u){return u.status.indexOf("Conflict")===0;});
+    conf.forEach(function(u){ if(!u.notes.trim()) b.push(u.name+" has a conflict — record how it will be managed"); });
+    steps.utilities = d.utilities.length>0 && !pend.length && conf.every(function(u){return u.notes.trim();});
+
+    var miss=SAFETY.filter(function(s){return !d.safety[s[0]];});
+    if(miss.length) b.push(miss.length+" safe-dig checklist item"+(miss.length>1?"s":"")+" not ticked");
+    steps.safety=!miss.length;
+
+    if(!d.signedAt) b.push("Supervisor has not signed off the dig plan");
+    steps.signoff=!!d.signedAt;
+    return {blockers:b,warnings:w,steps:steps};
+  }
+  function planBadge(j){
+    if(!j.excavation) return ["No dig","b-mute"];
+    var c=check(j);
+    if(!c.blockers.length) return ["Dig plan ✓","b-ok"];
+    var ex=expiryDate(j);
+    if(ex && today()>ex) return ["Ticket expired","b-bad"];
+    return ["Dig plan: "+c.blockers.length+" open","b-warn"];
+  }
+
+  // ---------- render ----------
+  var FILTERS=[
+    ["all","All",function(){return true;}],
+    ["needs","Needs dig plan",function(j){return j.excavation && check(j).blockers.length && j.status!=="done" && j.status!=="cancelled";}],
+    ["ready","Ready to start",function(j){return (j.status==="new"||j.status==="dispatched") && !check(j).blockers.length;}],
+    ["progress","In progress",function(j){return j.status==="progress";}],
+    ["done","Complete",function(j){return j.status==="done";}]
+  ];
+  function render(){ renderTabs(); renderList(); renderDetail(); }
+  function renderTabs(){
+    document.getElementById("tabs").innerHTML = FILTERS.map(function(f){
+      var n=db.jobs.filter(f[2]).length;
+      return '<button class="tab'+(ui.filter===f[0]?" on":"")+'" data-f="'+f[0]+'">'+f[1]+'<span class="n">'+n+'</span></button>';
+    }).join("");
+  }
+  function renderList(){
+    var f=FILTERS.find(function(x){return x[0]===ui.filter;});
+    var jobs=db.jobs.filter(f[2]).slice().sort(function(a,b){ return (a.date||"9999").localeCompare(b.date||"9999"); });
+    var el=document.getElementById("list");
+    if(!jobs.length){ el.innerHTML='<div class="empty">'+(db.jobs.length?"No jobs in this view.":"No jobs yet.<br>Tap <b>+ New job</b> to dispatch one.")+'</div>'; return; }
+    el.innerHTML=jobs.map(function(j){
+      var pb=planBadge(j), sc={new:"b-info",dispatched:"b-info",progress:"b-warn",done:"b-ok",cancelled:"b-mute"}[j.status];
+      return '<button class="job'+(ui.sel===j.id?" sel":"")+'" data-id="'+j.id+'">'+
+        '<div class="t"><span>'+esc(j.customer||"Untitled job")+'</span><span class="sub">'+esc(j.num)+'</span></div>'+
+        '<div class="m">'+esc(j.address||"No address")+'</div>'+
+        '<div class="m">'+(j.date?fmt(parse(j.date)):"Unscheduled")+(j.crew?" · "+esc(j.crew):"")+'</div>'+
+        '<div class="badges"><span class="badge '+sc+'">'+STATUS[j.status]+'</span><span class="badge '+pb[1]+'">'+pb[0]+'</span></div>'+
+      '</button>';
+    }).join("");
+  }
+
+  function inp(path,val,type,ph){ return '<input type="'+(type||"text")+'" data-k="'+path+'" value="'+esc(val)+'"'+(ph?' placeholder="'+esc(ph)+'"':"")+'>'; }
+
+  function renderDetail(){
+    var el=document.getElementById("detail"), lay=document.getElementById("layout");
+    var j=ui.sel && job(ui.sel);
+    lay.classList.toggle("detail-open",!!j);
+    if(!j){ el.innerHTML='<div class="panel empty" style="border-style:dashed">Select a job to view its dispatch details and dig plan.</div>'; return; }
+    var d=j.dbyd, c=check(j), locked=(j.status==="progress"||j.status==="done");
+    var rd=readyDate(j), ex=expiryDate(j);
+    var crewOpts='<option value="">— Unassigned —</option>'+db.settings.crews.map(function(c){return '<option'+(c===j.crew?" selected":"")+'>'+esc(c)+'</option>';}).join("");
+
+    var h='<div class="panel">';
+    h+='<div class="row no-print" style="justify-content:space-between;margin-bottom:8px"><button class="btn sm back" data-act="back">← Jobs</button><span></span>'+
+       '<div class="row"><button class="btn sm" data-act="print">Print plan</button><button class="btn sm danger" data-act="delete">Delete</button></div></div>';
+    h+='<h2>'+esc(j.customer||"Untitled job")+' <span class="sub">'+esc(j.num)+' · '+STATUS[j.status]+'</span></h2>';
+
+    // Job details
+    h+='<div class="sec"><h3>Job details</h3><div class="grid">'+
+      '<label class="f">Customer'+inp("customer",j.customer,"text","Name or company")+'</label>'+
+      '<label class="f">Phone'+inp("phone",j.phone,"tel")+'</label>'+
+      '<label class="f" style="grid-column:1/-1">Site address'+inp("address",j.address,"text","Street, suburb / city")+'</label>'+
+      '<label class="f">Scheduled date'+inp("date",j.date,"date")+'</label>'+
+      '<label class="f">Crew<select data-k="crew">'+crewOpts+'</select></label>'+
+      '<label class="f" style="grid-column:1/-1">Work description<textarea data-k="work" placeholder="e.g. Trench 30 m for new water service">'+esc(j.work)+'</textarea></label>'+
+      '</div>'+
+      '<label class="chk'+(j.excavation?" on":"")+'" style="margin-top:10px"><input type="checkbox" data-k="excavation"'+(j.excavation?" checked":"")+'><span><b>This job involves digging / excavation</b><br><span class="sub">Any trenching, boring, post holes, stakes or ground penetration. Requires a Dial Before You Dig plan.</span></span></label>'+
+      '</div>';
+
+    if(j.excavation){
+      // Step 1 ticket
+      h+='<div class="sec"><h3><span class="step'+(c.steps.ticket?" done":"")+'">1</span>Locate request (Dial Before You Dig)</h3><div class="grid">'+
+        '<label class="f">Ticket / reference #'+inp("dbyd.ticket",d.ticket,"text","e.g. 2611-0042-118")+'</label>'+
+        '<label class="f">Date requested'+inp("dbyd.requested",d.requested,"date")+'</label>'+
+        '<label class="f">Earliest dig date'+inp("dbyd.readyOverride",d.readyOverride||(rd?iso(rd):""),"date")+'<span class="hint">Auto: +'+db.settings.waitDays+' business days. Edit to override.</span></label>'+
+        '<label class="f">Ticket expires'+inp("dbyd.expiresOverride",d.expiresOverride||(ex?iso(ex):""),"date")+'<span class="hint">Auto: +'+db.settings.validDays+' days. Edit to override.</span></label>'+
+        '<label class="f">Excavation depth'+inp("depth",j.depth,"text","e.g. 900 mm")+'</label>'+
+        '<label class="f">Equipment<select data-k="equipment">'+["Hand tools","Vacuum excavation","Excavator","Trencher","Directional drill / borer","Auger / post-hole","Other"].map(function(o){return '<option'+(o===j.equipment?" selected":"")+'>'+o+'</option>';}).join("")+'</select></label>'+
+        '<label class="f" style="grid-column:1/-1">Dig area / footprint<textarea data-k="dbyd.digArea" placeholder="e.g. Front yard, 2 m from east boundary, trench to meter box at kerb">'+esc(d.digArea)+'</textarea></label>'+
+        '</div></div>';
+
+      // Step 2 utilities
+      h+='<div class="sec"><h3><span class="step'+(c.steps.utilities?" done":"")+'">2</span>Utility owner responses</h3><div class="tbl"><table><thead><tr><th>Utility</th><th>Response</th><th>Ref / notes</th><th></th></tr></thead><tbody>';
+      d.utilities.forEach(function(u,i){
+        var cls=u.status==="Pending"?"b-warn":u.status.indexOf("Conflict")===0?"b-bad":"b-ok";
+        h+='<tr><td style="min-width:120px"><input type="text" data-u="'+i+'" data-uk="name" value="'+esc(u.name)+'"></td>'+
+          '<td style="min-width:160px"><select data-u="'+i+'" data-uk="status">'+UTIL_STATUS.map(function(s){return '<option'+(s===u.status?" selected":"")+'>'+s+'</option>';}).join("")+'</select> <span class="badge '+cls+'" style="display:inline-block;margin-top:4px">'+(u.status==="Pending"?"waiting":u.status.indexOf("Conflict")===0?"conflict":"ok")+'</span></td>'+
+          '<td style="min-width:180px"><input type="text" data-u="'+i+'" data-uk="notes" value="'+esc(u.notes)+'" placeholder="'+(u.status.indexOf("Conflict")===0?"How will this be managed? (required)":"Plan ref, contact, mark colour…")+'"></td>'+
+          '<td class="no-print"><button class="btn sm danger" data-act="rmUtil" data-i="'+i+'" title="Remove">✕</button></td></tr>';
+      });
+      h+='</tbody></table></div><button class="btn sm no-print" style="margin-top:8px" data-act="addUtil">+ Add utility</button></div>';
+
+      // Step 3 safety
+      h+='<div class="sec"><h3><span class="step'+(c.steps.safety?" done":"")+'">3</span>Safe-dig checklist</h3>';
+      SAFETY.forEach(function(s){ var on=!!d.safety[s[0]]; h+='<label class="chk'+(on?" on":"")+'"><input type="checkbox" data-s="'+s[0]+'"'+(on?" checked":"")+'><span>'+s[1]+'</span></label>'; });
+      h+='<label class="f" style="margin-top:8px">Dig plan notes<textarea data-k="dbyd.notes" placeholder="Hazards, spotter, traffic control, anything the crew needs to know">'+esc(d.notes)+'</textarea></label></div>';
+
+      // Step 4 sign-off
+      h+='<div class="sec"><h3><span class="step'+(c.steps.signoff?" done":"")+'">4</span>Supervisor sign-off</h3>';
+      if(d.signedAt){
+        h+='<p>Signed off by <b>'+esc(d.supervisor)+'</b> on '+new Date(d.signedAt).toLocaleString()+'</p>'+
+           (locked?'':'<button class="btn sm no-print" style="margin-top:8px" data-act="unsign">Revoke sign-off</button>');
+      } else {
+        var preBlock=c.blockers.filter(function(x){return x.indexOf("signed off")<0;});
+        h+='<div class="row"><input type="text" id="supName" placeholder="Supervisor name" style="max-width:260px" value="'+esc(d.supervisor)+'">'+
+           '<button class="btn primary" data-act="sign"'+(preBlock.length?" disabled":"")+'>Sign off dig plan</button></div>'+
+           (preBlock.length?'<p class="hint">Complete steps 1–3 before signing off.</p>':'');
+      }
+      h+='</div>';
+    }
+
+    // Gate
+    if(j.status==="new"||j.status==="dispatched"){
+      if(c.blockers.length){
+        h+='<div class="gate blocked"><h4>⛔ Cannot start this job yet</h4><ul>'+c.blockers.map(function(b){return '<li>'+esc(b)+'</li>';}).join("")+'</ul></div>';
+      } else {
+        h+='<div class="gate ready"><h4>✅ '+(c.na?"No excavation — clear to start":"Dig plan complete — clear to start")+'</h4></div>';
+      }
+      if(c.warnings.length) h+='<div class="gate" style="background:var(--warn-soft);margin-top:8px"><ul>'+c.warnings.map(function(w){return '<li>'+esc(w)+'</li>';}).join("")+'</ul></div>';
+    }
+    h+='<div class="row no-print" style="margin-top:14px">';
+    if(j.status==="new") h+='<button class="btn" data-act="dispatch"'+(j.crew?"":" disabled title=\"Assign a crew first\"")+'>Dispatch to crew</button>';
+    if(j.status==="new"||j.status==="dispatched") h+='<button class="btn go" data-act="start"'+(c.blockers.length?" disabled":"")+'>Start job</button>';
+    if(j.status==="progress") h+='<button class="btn go" data-act="complete">Mark complete</button>';
+    if(j.status!=="cancelled"&&j.status!=="done") h+='<button class="btn" data-act="cancel">Cancel job</button>';
+    if(j.status==="cancelled"||j.status==="done") h+='<button class="btn" data-act="reopen">Reopen</button>';
+    h+='</div>';
+
+    h+='<div class="sec"><h3>Activity</h3><ul class="log">'+j.log.map(function(l){return '<li>'+new Date(l.at).toLocaleString()+' — '+esc(l.msg)+'</li>';}).join("")+'</ul></div>';
+    h+='</div>';
+    el.innerHTML=h;
+    if(locked) el.querySelectorAll(".sec input:not(#supName), .sec select, .sec textarea").forEach(function(x){ if(x.closest(".sec").querySelector("h3") && !/Job details/.test(x.closest(".sec").querySelector("h3").textContent)) x.disabled=true; });
+  }
+
+  // ---------- events ----------
+  function setPath(o,path,v){ var p=path.split("."); while(p.length>1) o=o[p.shift()]; o[p[0]]=v; }
+  var refreshTimer;
+  function softRefresh(){ clearTimeout(refreshTimer); refreshTimer=setTimeout(function(){ renderTabs(); renderList(); },150); }
+
+  document.getElementById("tabs").addEventListener("click",function(e){ var b=e.target.closest(".tab"); if(b){ ui.filter=b.dataset.f; render(); }});
+  document.getElementById("list").addEventListener("click",function(e){ var b=e.target.closest(".job"); if(b){ ui.sel=b.dataset.id; render(); window.scrollTo(0,0); }});
+  var det=document.getElementById("detail");
+  det.addEventListener("input",function(e){
+    var j=job(ui.sel); if(!j) return; var t=e.target;
+    if(t.id==="supName"){ j.dbyd.supervisor=t.value; save(); return; }
+    if(t.dataset.k && t.type!=="checkbox" && t.tagName!=="SELECT"){ setPath(j,t.dataset.k,t.value); save(); softRefresh(); }
+    if(t.dataset.u && t.tagName==="INPUT"){ j.dbyd.utilities[+t.dataset.u][t.dataset.uk]=t.value; save(); softRefresh(); }
+  });
+  det.addEventListener("change",function(e){
+    var j=job(ui.sel); if(!j) return; var t=e.target;
+    if(t.id==="supName"){ j.dbyd.supervisor=t.value; save(); return; }
+    var planField = t.dataset.s || t.dataset.u || (t.dataset.k && (t.dataset.k.indexOf("dbyd.")===0 || t.dataset.k==="excavation"));
+    if(planField && j.dbyd.signedAt && j.status!=="progress" && j.status!=="done"){
+      j.dbyd.signedAt=""; logIt(j,"Dig plan changed — supervisor sign-off cleared");
+    }
+    if(t.dataset.k){
+      var v = t.type==="checkbox" ? t.checked : t.value;
+      if(t.dataset.k==="dbyd.readyOverride"){ var rd=readyDate(Object.assign({},j,{dbyd:Object.assign({},j.dbyd,{readyOverride:""})})); v=(rd&&iso(rd)===v)?"":v; }
+      if(t.dataset.k==="dbyd.expiresOverride"){ var ex=expiryDate(Object.assign({},j,{dbyd:Object.assign({},j.dbyd,{expiresOverride:""})})); v=(ex&&iso(ex)===v)?"":v; }
+      setPath(j,t.dataset.k,v);
+      if(t.dataset.k==="excavation") logIt(j, v?"Marked as excavation job":"Marked as no excavation");
+    }
+    if(t.dataset.u){ var u=j.dbyd.utilities[+t.dataset.u]; var old=u[t.dataset.uk]; u[t.dataset.uk]=t.value; if(t.dataset.uk==="status" && old!==t.value) logIt(j,u.name+": "+t.value); }
+    if(t.dataset.s){ j.dbyd.safety[t.dataset.s]=t.checked; }
+    save();
+    // Defer so focus has moved to the next field, then restore it after re-render.
+    setTimeout(function(){
+      var a=document.activeElement, sel=null;
+      if(a && det.contains(a)){
+        if(a.id) sel="#"+a.id;
+        else ["k","u","s","act"].some(function(k){ if(a.dataset[k]!=null){ sel="[data-"+k+'="'+a.dataset[k]+'"]'+(a.dataset.uk?'[data-uk="'+a.dataset.uk+'"]':""); return true; } });
+      }
+      render();
+      if(sel){ var n=det.querySelector(sel); if(n) n.focus(); }
+    },0);
+  });
+  det.addEventListener("click",function(e){
+    var b=e.target.closest("[data-act]"); if(!b) return; var j=job(ui.sel); if(!j) return; var a=b.dataset.act;
+    if(a==="back"){ ui.sel=null; }
+    else if(a==="print"){ window.print(); return; }
+    else if(a==="delete"){ if(!confirm("Delete job "+j.num+"?")) return; db.jobs=db.jobs.filter(function(x){return x!==j;}); ui.sel=null; }
+    else if(a==="addUtil"){ j.dbyd.utilities.push({id:uid(),name:"",status:"Pending",ref:"",notes:""}); if(j.dbyd.signedAt){ j.dbyd.signedAt=""; logIt(j,"Dig plan changed — supervisor sign-off cleared"); } }
+    else if(a==="rmUtil"){ var u=j.dbyd.utilities.splice(+b.dataset.i,1)[0]; logIt(j,"Removed utility "+(u.name||"(unnamed)")); if(j.dbyd.signedAt){ j.dbyd.signedAt=""; logIt(j,"Dig plan changed — supervisor sign-off cleared"); } }
+    else if(a==="sign"){ var n=(document.getElementById("supName").value||"").trim(); if(!n){ alert("Enter the supervisor's name to sign off."); return; } j.dbyd.supervisor=n; j.dbyd.signedAt=new Date().toISOString(); logIt(j,"Dig plan signed off by "+n); }
+    else if(a==="unsign"){ j.dbyd.signedAt=""; logIt(j,"Sign-off revoked"); }
+    else if(a==="dispatch"){ j.status="dispatched"; logIt(j,"Dispatched to "+j.crew); }
+    else if(a==="start"){ if(check(j).blockers.length) return; j.status="progress"; logIt(j,"Job started"+(j.excavation?" (ticket "+j.dbyd.ticket+")":"")); }
+    else if(a==="complete"){ j.status="done"; logIt(j,"Job completed"); }
+    else if(a==="cancel"){ if(!confirm("Cancel this job?")) return; j.status="cancelled"; logIt(j,"Job cancelled"); }
+    else if(a==="reopen"){ j.status=j.crew?"dispatched":"new"; logIt(j,"Job reopened"); }
+    save(); render();
+  });
+
+  document.getElementById("newJobBtn").onclick=function(){ var j=newJob(); db.jobs.push(j); ui.sel=j.id; ui.filter="all"; save(); render(); var f=det.querySelector('[data-k="customer"]'); if(f) f.focus(); };
+
+  // settings
+  var dlg=document.getElementById("settingsDlg");
+  document.getElementById("settingsBtn").onclick=function(){
+    document.getElementById("setWait").value=db.settings.waitDays;
+    document.getElementById("setValid").value=db.settings.validDays;
+    document.getElementById("setCrews").value=db.settings.crews.join("\n");
+    document.getElementById("setUtils").value=db.settings.utilities.join("\n");
+    dlg.showModal();
+  };
+  document.getElementById("setCancel").onclick=function(){ dlg.close(); };
+  document.getElementById("setSave").onclick=function(){
+    function lines(id){ return document.getElementById(id).value.split("\n").map(function(s){return s.trim();}).filter(Boolean); }
+    db.settings.waitDays=Math.max(0,parseInt(document.getElementById("setWait").value,10)||0);
+    db.settings.validDays=Math.max(1,parseInt(document.getElementById("setValid").value,10)||28);
+    db.settings.crews=lines("setCrews"); db.settings.utilities=lines("setUtils");
+    save(); dlg.close(); render();
+  };
+
+  // export / import
+  document.getElementById("exportBtn").onclick=function(){
+    var blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"});
+    var a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="dispatch-"+iso(new Date())+".json"; a.click();
+    setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+  };
+  document.getElementById("importFile").onchange=function(e){
+    var f=e.target.files[0]; if(!f) return; var r=new FileReader();
+    r.onload=function(){ try{ var d=JSON.parse(r.result); if(!d.jobs||!d.settings) throw 0; if(!confirm("Replace all current jobs with "+d.jobs.length+" imported jobs?")) return; db=d; ui.sel=null; save(); render(); }catch(err){ alert("That file isn't a valid dispatch export."); } };
+    r.readAsText(f); e.target.value="";
+  };
+
+  render();
+})();
+</script>
+</body>
+</html>

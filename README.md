@@ -26,3 +26,24 @@ vercel dev
 
 This serves `index.html` and `api/polish.js` together on localhost, matching
 production routing.
+
+## Dig-Safe Dispatch (`/dispatch`)
+
+`dispatch/index.html` is a standalone job dispatch app (no backend; data is
+saved in the browser's localStorage, with JSON export/import). Any job marked
+as involving excavation **cannot be started** until its Dial Before You Dig
+plan is complete:
+
+1. **Locate request** – ticket number, date requested, and dig area. The
+   earliest legal dig date (default +2 business days) and ticket expiry
+   (default 28 days) are calculated automatically and can be overridden.
+2. **Utility owner responses** – every utility must be Marked or Clear; a
+   Conflict needs notes on how it will be managed.
+3. **Safe-dig checklist** – white-lining, marks verified, plans on site,
+   hand-dig in tolerance zone, potholing, crew briefing, emergency plan.
+4. **Supervisor sign-off** – editing the plan afterwards clears the sign-off.
+
+The **Start job** button stays disabled and lists exactly what is missing until
+all four steps pass. Wait/validity periods, crews and default utilities are
+editable under **Settings** to match your local rules. On Vercel it is served
+at `/dispatch`.
