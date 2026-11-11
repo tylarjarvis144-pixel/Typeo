@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f5d3a">
+<title>San Choy Bow</title>
+<style>
+  :root {
+    --bg: #faf7f1;
+    --card: #ffffff;
+    --ink: #22201c;
+    --muted: #6d675d;
+    --line: #e7e1d6;
+    --accent: #2f5d3a;
+    --accent-soft: #e5efe6;
+    --warm: #c2541c;
+    --warm-soft: #fbe9df;
+    --done: #9a948a;
+    --radius: 16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161613;
+      --card: #201f1b;
+      --ink: #f1ede5;
+      --muted: #a8a196;
+      --line: #34322c;
+      --accent: #7fbf8c;
+      --accent-soft: #233328;
+      --warm: #f08a55;
+      --warm-soft: #3a261b;
+      --done: #75706a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161613; --card: #201f1b; --ink: #f1ede5; --muted: #a8a196;
+    --line: #34322c; --accent: #7fbf8c; --accent-soft: #233328;
+    --warm: #f08a55; --warm-soft: #3a261b; --done: #75706a;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 17px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: max(20px, env(safe-area-inset-top)) 16px calc(32px + env(safe-area-inset-bottom));
+  }
+
+  header h1 {
+    font-size: 2.1rem;
+    line-height: 1.1;
+    margin: 8px 0 6px;
+    letter-spacing: -0.02em;
+  }
+  .sub { color: var(--muted); margin: 0 0 14px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .chip {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 0.85rem;
+    padding: 5px 11px;
+    border-radius: 999px;
+  }
+
+  section { margin-top: 28px; }
+  .sec-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    margin-bottom: 10px;
+  }
+  h2 { font-size: 1.3rem; margin: 0; }
+  .count { color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+
+  ul { list-style: none; margin: 0; padding: 0; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  /* Ingredient rows */
+  .ing label {
+    display: flex; align-items: center; gap: 14px;
+    min-height: 56px;
+    padding: 12px 16px;
+    cursor: pointer;
+    border-top: 1px solid var(--line);
+  }
+  .ing li:first-child label { border-top: 0; }
+  .ing .amt { font-weight: 650; }
+  .ing .opt { color: var(--muted); font-size: 0.85rem; }
+
+  /* Custom tick box */
+  input[type="checkbox"] {
+    appearance: none; -webkit-appearance: none;
+    flex: 0 0 auto;
+    width: 28px; height: 28px;
+    margin: 0;
+    border: 2px solid var(--line);
+    border-radius: 8px;
+    background: var(--card);
+    display: grid; place-content: center;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  input[type="checkbox"]::after {
+    content: "";
+    width: 7px; height: 13px;
+    border: solid #fff; border-width: 0 3px 3px 0;
+    transform: rotate(45deg) translate(-1px, -1px) scale(0);
+    transition: transform .15s;
+  }
+  input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+  input[type="checkbox"]:checked::after { transform: rotate(45deg) translate(-1px, -1px) scale(1); }
+  input[type="checkbox"]:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  :root[data-theme="dark"] input[type="checkbox"]::after { border-color: #161613; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) input[type="checkbox"]::after { border-color: #161613; }
+  }
+
+  .checked-text { transition: color .15s; }
+  input:checked + .checked-text { color: var(--done); text-decoration: line-through; }
+
+  /* Steps */
+  .steps { display: grid; gap: 12px; counter-reset: step; }
+  .step {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    transition: opacity .2s;
+  }
+  .step.is-done { opacity: 0.6; }
+  .step-row { display: flex; gap: 14px; align-items: flex-start; cursor: pointer; }
+  .step-row input { margin-top: 2px; }
+  .num {
+    display: block;
+    font-size: 0.78rem; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted);
+    margin-bottom: 2px;
+  }
+
+  /* Timer */
+  .timer {
+    margin-top: 14px;
+    background: var(--warm-soft);
+    border-radius: 12px;
+    padding: 12px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px 12px;
+    align-items: center;
+  }
+  .time {
+    font-size: 2rem; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--warm);
+    line-height: 1;
+  }
+  .time-label { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+  .btns { display: flex; gap: 8px; }
+  .btn {
+    font: inherit; font-weight: 650;
+    min-height: 48px; min-width: 48px;
+    padding: 0 18px;
+    border: 0; border-radius: 12px;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .btn-main { background: var(--warm); color: #fff; min-width: 96px; }
+  .btn-ghost { background: transparent; color: var(--warm); border: 2px solid var(--warm); }
+  .btn:active { transform: scale(0.97); }
+  .btn:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  :root[data-theme="dark"] .btn-main { color: #161613; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .btn-main { color: #161613; }
+  }
+  .bar {
+    grid-column: 1 / -1;
+    height: 6px; border-radius: 3px;
+    background: color-mix(in srgb, var(--warm) 20%, transparent);
+    overflow: hidden;
+  }
+  .bar > span {
+    display: block; height: 100%; width: 0%;
+    background: var(--warm);
+    transition: width .25s linear;
+  }
+  .timer.finished { animation: pulse 0.9s ease-in-out 4; }
+  @keyframes pulse {
+    50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--warm) 35%, transparent); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .timer.finished { animation: none; }
+    .bar > span { transition: none; }
+  }
+
+  .footer-actions {
+    margin-top: 28px;
+    display: flex; flex-wrap: wrap; gap: 10px;
+  }
+  .btn-plain {
+    background: var(--card); color: var(--ink);
+    border: 1px solid var(--line);
+  }
+  .btn-plain[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .note { color: var(--muted); font-size: 0.85rem; margin-top: 10px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>San Choy Bow</h1>
+    <p class="sub">Savoury mince in crisp lettuce cups. Quick, fresh, done in 15 minutes.</p>
+    <div class="meta">
+      <span class="chip">Serves 4</span>
+      <span class="chip">~15 min</span>
+      <span class="chip">Wok</span>
+    </div>
+  </header>
+
+  <section aria-labelledby="ing-h">
+    <div class="sec-head">
+      <h2 id="ing-h">Ingredients</h2>
+      <span class="count" id="ing-count"></span>
+    </div>
+    <ul class="card ing" id="ingredients">
+      <li><label><input type="checkbox" data-key="i1"><span class="checked-text"><span class="amt">500g</span> pork or chicken mince</span></label></li>
+      <li><label><input type="checkbox" data-key="i2"><span class="checked-text"><span class="amt">1 bag</span> stir-fry veggies, chopped small</span></label></li>
+      <li><label><input type="checkbox" data-key="i3"><span class="checked-text"><span class="amt">3</span> garlic cloves, crushed</span></label></li>
+      <li><label><input type="checkbox" data-key="i4"><span class="checked-text"><span class="amt">1 tbsp</span> grated ginger</span></label></li>
+      <li><label><input type="checkbox" data-key="i5"><span class="checked-text"><span class="amt">3</span> spring onions, sliced</span></label></li>
+      <li><label><input type="checkbox" data-key="i6"><span class="checked-text"><span class="amt">2 tbsp</span> soy sauce</span></label></li>
+      <li><label><input type="checkbox" data-key="i7"><span class="checked-text"><span class="amt">2 tbsp</span> oyster sauce</span></label></li>
+      <li><label><input type="checkbox" data-key="i8"><span class="checked-text"><span class="amt">1 tsp</span> sesame oil</span></label></li>
+      <li><label><input type="checkbox" data-key="i9"><span class="checked-text"><span class="amt">1 cup</span> chopped water chestnuts <span class="opt">(optional)</span></span></label></li>
+      <li><label><input type="checkbox" data-key="i10"><span class="checked-text"><span class="amt">1</span> iceberg lettuce, leaves separated</span></label></li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="steps-h">
+    <div class="sec-head">
+      <h2 id="steps-h">Method</h2>
+      <span class="count" id="step-count"></span>
+    </div>
+    <ol class="steps" id="steps" style="list-style:none;margin:0;padding:0">
+      <li class="step">
+        <label class="step-row"><input type="checkbox" data-key="s1"><span class="checked-text"><span class="num">Step 1</span>Heat a wok on high and brown the mince.</span></label>
+      </li>
+      <li class="step">
+        <label class="step-row"><input type="checkbox" data-key="s2"><span class="checked-text"><span class="num">Step 2</span>Add garlic and ginger, stir for 30 seconds.</span></label>
+        <div class="timer" data-seconds="30" data-name="Garlic &amp; ginger">
+          <div><div class="time" aria-live="off">0:30</div><div class="time-label">Garlic &amp; ginger</div></div>
+          <div class="btns">
+            <button class="btn btn-main" type="button" data-act="toggle">Start</button>
+            <button class="btn btn-ghost" type="button" data-act="reset" aria-label="Reset timer">↺</button>
+          </div>
+          <div class="bar"><span></span></div>
+        </div>
+      </li>
+      <li class="step">
+        <label class="step-row"><input type="checkbox" data-key="s3"><span class="checked-text"><span class="num">Step 3</span>Add veggies and water chestnuts, stir-fry for 3 minutes.</span></label>
+        <div class="timer" data-seconds="180" data-name="Stir-fry veggies">
+          <div><div class="time" aria-live="off">3:00</div><div class="time-label">Stir-fry veggies</div></div>
+          <div class="btns">
+            <button class="btn btn-main" type="button" data-act="toggle">Start</button>
+            <button class="btn btn-ghost" type="button" data-act="reset" aria-label="Reset timer">↺</button>
+          </div>
+          <div class="bar"><span></span></div>
+        </div>
+      </li>
+      <li class="step">
+        <label class="step-row"><input type="checkbox" data-key="s4"><span class="checked-text"><span class="num">Step 4</span>Stir through soy, oyster sauce and sesame oil. Take off the heat and add the spring onions.</span></label>
+      </li>
+      <li class="step">
+        <label class="step-row"><input type="checkbox" data-key="s5"><span class="checked-text"><span class="num">Step 5</span>Serve in lettuce cups or on rice.</span></label>
+      </li>
+    </ol>
+  </section>
+
+  <div class="footer-actions">
+    <button class="btn btn-plain" type="button" id="wake" aria-pressed="false" hidden>Keep screen on</button>
+    <button class="btn btn-plain" type="button" id="clear">Clear all ticks</button>
+  </div>
+  <p class="note" id="sr-status" role="status" aria-live="polite"></p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var STORE = "sanchoybow-ticks-v1";
+
+  /* ---------- Tick boxes (remembered on this device) ---------- */
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('input[type="checkbox"][data-key]'));
+  var saved = {};
+  try { saved = JSON.parse(localStorage.getItem(STORE) || "{}") || {}; } catch (e) { saved = {}; }
+
+  function save() {
+    var o = {};
+    boxes.forEach(function (b) { if (b.checked) o[b.dataset.key] = 1; });
+    try { localStorage.setItem(STORE, JSON.stringify(o)); } catch (e) {}
+  }
+  function updateCounts() {
+    var ing = boxes.filter(function (b) { return b.dataset.key[0] === "i"; });
+    var st = boxes.filter(function (b) { return b.dataset.key[0] === "s"; });
+    var c = function (a) { return a.filter(function (b) { return b.checked; }).length; };
+    document.getElementById("ing-count").textContent = c(ing) + " / " + ing.length + " ready";
+    document.getElementById("step-count").textContent = c(st) + " / " + st.length + " done";
+    st.forEach(function (b) { b.closest(".step").classList.toggle("is-done", b.checked); });
+  }
+  boxes.forEach(function (b) {
+    b.checked = !!saved[b.dataset.key];
+    b.addEventListener("change", function () { save(); updateCounts(); });
+  });
+  updateCounts();
+
+  document.getElementById("clear").addEventListener("click", function () {
+    boxes.forEach(function (b) { b.checked = false; });
+    save(); updateCounts();
+  });
+
+  /* ---------- Sound ---------- */
+  var ctx = null;
+  function unlockAudio() {
+    try {
+      if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (ctx.state === "suspended") ctx.resume();
+    } catch (e) {}
+  }
+  function beep() {
+    if (!ctx) return;
+    try {
+      var t = ctx.currentTime;
+      for (var i = 0; i < 3; i++) {
+        var o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = "sine";
+        o.frequency.value = 880;
+        var s = t + i * 0.45;
+        g.gain.setValueAtTime(0.0001, s);
+        g.gain.exponentialRampToValueAtTime(0.5, s + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, s + 0.3);
+        o.connect(g).connect(ctx.destination);
+        o.start(s); o.stop(s + 0.32);
+      }
+    } catch (e) {}
+  }
+  function buzz() {
+    try { if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 500]); } catch (e) {}
+  }
+
+  /* ---------- Timers ---------- */
+  var status = document.getElementById("sr-status");
+  function fmt(sec) {
+    sec = Math.max(0, Math.ceil(sec));
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll(".timer"), function (el) {
+    var total = Number(el.dataset.seconds);
+    var name = el.dataset.name;
+    var timeEl = el.querySelector(".time");
+    var bar = el.querySelector(".bar > span");
+    var mainBtn = el.querySelector('[data-act="toggle"]');
+    var resetBtn = el.querySelector('[data-act="reset"]');
+    var remaining = total;   // seconds left when not running
+    var endAt = 0;           // timestamp (ms) when running
+    var tick = null;
+    var state = "idle";      // idle | running | paused | done
+
+    function left() { return state === "running" ? (endAt - Date.now()) / 1000 : remaining; }
+    function render() {
+      var l = left();
+      timeEl.textContent = fmt(l);
+      bar.style.width = (100 * (1 - Math.max(0, l) / total)) + "%";
+      mainBtn.textContent = state === "running" ? "Pause"
+                          : state === "paused" ? "Resume"
+                          : state === "done" ? "Again" : "Start";
+    }
+    function stopTick() { if (tick) { clearInterval(tick); tick = null; } }
+    function finish() {
+      stopTick();
+      state = "done"; remaining = 0;
+      render();
+      el.classList.remove("finished"); void el.offsetWidth; el.classList.add("finished");
+      beep(); buzz();
+      status.textContent = name + " timer done.";
+    }
+    function start() {
+      unlockAudio();
+      if (state === "done") remaining = total;
+      endAt = Date.now() + remaining * 1000;
+      state = "running";
+      el.classList.remove("finished");
+      stopTick();
+      tick = setInterval(function () { if (left() <= 0) finish(); else render(); }, 200);
+      render();
+      status.textContent = name + " timer started.";
+    }
+    function pause() {
+      remaining = left();
+      state = "paused";
+      stopTick(); render();
+      status.textContent = name + " timer paused.";
+    }
+    function reset() {
+      stopTick();
+      state = "idle"; remaining = total;
+      el.classList.remove("finished");
+      render();
+      status.textContent = name + " timer reset.";
+    }
+
+    mainBtn.addEventListener("click", function () { state === "running" ? pause() : start(); });
+    resetBtn.addEventListener("click", reset);
+    // Catch up immediately if the phone was backgrounded mid-timer
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden && state === "running") { if (left() <= 0) finish(); else render(); }
+    });
+    render();
+  });
+
+  /* ---------- Keep screen awake (where supported) ---------- */
+  var wakeBtn = document.getElementById("wake");
+  var lock = null, wantLock = false;
+  if ("wakeLock" in navigator) {
+    wakeBtn.hidden = false;
+    var acquire = function () {
+      navigator.wakeLock.request("screen").then(function (l) {
+        lock = l;
+        lock.addEventListener("release", function () { lock = null; if (!wantLock) setPressed(false); });
+        setPressed(true);
+      }).catch(function () { wantLock = false; setPressed(false); });
+    };
+    var setPressed = function (on) {
+      wakeBtn.setAttribute("aria-pressed", on ? "true" : "false");
+      wakeBtn.textContent = on ? "Screen stays on ✓" : "Keep screen on";
+    };
+    wakeBtn.addEventListener("click", function () {
+      wantLock = !wantLock;
+      if (wantLock) acquire();
+      else { if (lock) lock.release(); setPressed(false); }
+    });
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden && wantLock && !lock) acquire();
+    });
+  }
+})();
+</script>
+</body>
+</html>
