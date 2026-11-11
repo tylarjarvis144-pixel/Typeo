@@ -82,6 +82,15 @@
   .log{font-size:13px;color:var(--muted);list-style:none}
   .log li{padding:4px 0;border-top:1px solid var(--line)}
   .hint{font-size:12px;color:var(--muted);margin-top:4px}
+  .atts{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:10px}
+  .att{border:1px solid var(--line);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:6px;min-width:0}
+  .att .th{height:100px;border-radius:6px;background:var(--canvas);display:grid;place-items:center;overflow:hidden;font-size:32px;cursor:pointer}
+  .att .th img{width:100%;height:100%;object-fit:cover}
+  .att .nm{font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .att select{padding:4px 6px;font-size:12px}
+  .drop{border:2px dashed var(--line);border-radius:10px;padding:14px;text-align:center;color:var(--muted);font-size:14px}
+  .drop.over{border-color:var(--brand);background:var(--brand-soft)}
+  .links a{font-size:13px;color:var(--info);font-weight:600;text-decoration:none}
   .back{display:none}
   @media (max-width:820px){.back{display:inline-block}}
   dialog{border:none;border-radius:14px;padding:18px;background:var(--surface);color:var(--ink);width:min(520px,calc(100vw - 32px))}
@@ -89,6 +98,7 @@
   @media print{
     body{background:#fff} header,.tabs,.list,.no-print{display:none!important}
     .layout{display:block}.panel{border:none}
+    .atts{grid-template-columns:1fr 1fr}.att .th{height:auto}.att .th img{object-fit:contain}
   }
 </style>
 </head>
@@ -120,6 +130,7 @@
     <label class="f">Locate wait (business days)<input type="number" min="0" id="setWait"></label>
     <label class="f">Ticket valid for (calendar days)<input type="number" min="1" id="setValid"></label>
   </div>
+  <label class="f" style="margin-top:10px">Locate enquiry website<input type="text" id="setLodge" placeholder="https://www.byda.com.au/"></label>
   <label class="f" style="margin-top:10px">Crews (one per line)<textarea id="setCrews"></textarea></label>
   <label class="f" style="margin-top:10px">Default utilities to notify (one per line)<textarea id="setUtils"></textarea></label>
   <p class="hint">Wait and validity periods vary by state/region — set them to match your local one-call / Before You Dig rules.</p>
@@ -145,13 +156,15 @@
     ["emergencyPlan","Emergency contacts and gas-strike procedure reviewed"]
   ];
   var defaults = {
-    settings:{ waitDays:2, validDays:28,
+    settings:{ waitDays:2, validDays:28, lodgeUrl:"https://www.byda.com.au/",
       crews:["Crew A","Crew B","Crew C"],
       utilities:["Electric","Gas","Water","Sewer / Stormwater","Telecom / Fibre","Cable TV"] },
     jobs:[]
   };
 
   var db = load();
+  if(db.settings.lodgeUrl==null) db.settings.lodgeUrl=defaults.settings.lodgeUrl;
+  db.jobs.forEach(function(j){ if(!j.dbyd.attachments) j.dbyd.attachments=[]; });
   var ui = { filter:"all", sel:null };
 
   function load(){
@@ -162,6 +175,32 @@
     return JSON.parse(JSON.stringify(defaults));
   }
   function save(){ try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){} }
+
+  // ---------- attachment storage (IndexedDB; metadata lives on the job) ----------
+  var idbP=null;
+  function idb(){
+    if(!idbP) idbP=new Promise(function(res,rej){
+      var r=indexedDB.open("digsafe-files",1);
+      r.onupgradeneeded=function(){ r.result.createObjectStore("files",{keyPath:"id"}); };
+      r.onsuccess=function(){ res(r.result); }; r.onerror=function(){ rej(r.error); };
+    });
+    return idbP;
+  }
+  function tx(mode,fn){ return idb().then(function(d){ return new Promise(function(res,rej){
+    var t=d.transaction("files",mode), out=fn(t.objectStore("files"));
+    t.oncomplete=function(){ res(out&&out.result); }; t.onerror=function(){ rej(t.error); }; t.onabort=function(){ rej(t.error); };
+  });});}
+  function putFile(rec){ return tx("readwrite",function(st){ return st.put(rec); }); }
+  function getFile(id){ return tx("readonly",function(st){ return st.get(id); }); }
+  function delFile(id){ return tx("readwrite",function(st){ return st.delete(id); }); }
+  function allFiles(){ return tx("readonly",function(st){ return st.getAll(); }); }
+  function clearFiles(){ return tx("readwrite",function(st){ return st.clear(); }); }
+  var urlCache={};
+  function fileUrl(id){
+    if(urlCache[id]) return Promise.resolve(urlCache[id]);
+    return getFile(id).then(function(r){ if(!r) return null; return (urlCache[id]=URL.createObjectURL(r.blob)); });
+  }
+  function kb(n){ return n>1048576?(n/1048576).toFixed(1)+" MB":Math.max(1,Math.round(n/1024))+" KB"; }
 
   // ---------- dates ----------
   function today(){ var d=new Date(); d.setHours(0,0,0,0); return d; }
@@ -181,7 +220,7 @@
       status:"new", customer:"", phone:"", address:"", crew:"", date:"", work:"",
       excavation:true, depth:"", equipment:"Excavator",
       dbyd:{ ticket:"", requested:"", readyOverride:"", expiresOverride:"", digArea:"",
-             utilities:u, safety:{}, notes:"", supervisor:"", signedAt:"" },
+             utilities:u, attachments:[], safety:{}, notes:"", supervisor:"", signedAt:"" },
       log:[{at:new Date().toISOString(),msg:"Job created"}]
     };
   }
@@ -220,7 +259,8 @@
     if(pend.length) b.push("Waiting on response from: "+pend.map(function(u){return u.name;}).join(", "));
     var conf=d.utilities.filter(function(u){return u.status.indexOf("Conflict")===0;});
     conf.forEach(function(u){ if(!u.notes.trim()) b.push(u.name+" has a conflict — record how it will be managed"); });
-    steps.utilities = d.utilities.length>0 && !pend.length && conf.every(function(u){return u.notes.trim();});
+    if(!d.attachments.length) b.push("Attach the Dial Before You Dig plans / maps for this address");
+    steps.utilities = d.utilities.length>0 && !pend.length && conf.every(function(u){return u.notes.trim();}) && d.attachments.length>0;
 
     var miss=SAFETY.filter(function(s){return !d.safety[s[0]];});
     if(miss.length) b.push(miss.length+" safe-dig checklist item"+(miss.length>1?"s":"")+" not ticked");
@@ -300,18 +340,22 @@
 
     if(j.excavation){
       // Step 1 ticket
-      h+='<div class="sec"><h3><span class="step'+(c.steps.ticket?" done":"")+'">1</span>Locate request (Dial Before You Dig)</h3><div class="grid">'+
+      h+='<div class="sec plan"><h3><span class="step'+(c.steps.ticket?" done":"")+'">1</span>Locate request (Dial Before You Dig)</h3><div class="grid">'+
         '<label class="f">Ticket / reference #'+inp("dbyd.ticket",d.ticket,"text","e.g. 2611-0042-118")+'</label>'+
         '<label class="f">Date requested'+inp("dbyd.requested",d.requested,"date")+'</label>'+
         '<label class="f">Earliest dig date'+inp("dbyd.readyOverride",d.readyOverride||(rd?iso(rd):""),"date")+'<span class="hint">Auto: +'+db.settings.waitDays+' business days. Edit to override.</span></label>'+
         '<label class="f">Ticket expires'+inp("dbyd.expiresOverride",d.expiresOverride||(ex?iso(ex):""),"date")+'<span class="hint">Auto: +'+db.settings.validDays+' days. Edit to override.</span></label>'+
         '<label class="f">Excavation depth'+inp("depth",j.depth,"text","e.g. 900 mm")+'</label>'+
         '<label class="f">Equipment<select data-k="equipment">'+["Hand tools","Vacuum excavation","Excavator","Trencher","Directional drill / borer","Auger / post-hole","Other"].map(function(o){return '<option'+(o===j.equipment?" selected":"")+'>'+o+'</option>';}).join("")+'</select></label>'+
+        '<div class="links no-print" style="grid-column:1/-1;display:flex;gap:16px;flex-wrap:wrap">'+
+          (db.settings.lodgeUrl?'<a href="'+esc(db.settings.lodgeUrl)+'" target="_blank" rel="noopener">Lodge locate enquiry ↗</a>':'')+
+          (j.address.trim()?'<a href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(j.address)+'" target="_blank" rel="noopener">Open site address in Maps ↗</a>':'<span class="hint">Add a site address to open it in Maps</span>')+
+        '</div>'+
         '<label class="f" style="grid-column:1/-1">Dig area / footprint<textarea data-k="dbyd.digArea" placeholder="e.g. Front yard, 2 m from east boundary, trench to meter box at kerb">'+esc(d.digArea)+'</textarea></label>'+
         '</div></div>';
 
       // Step 2 utilities
-      h+='<div class="sec"><h3><span class="step'+(c.steps.utilities?" done":"")+'">2</span>Utility owner responses</h3><div class="tbl"><table><thead><tr><th>Utility</th><th>Response</th><th>Ref / notes</th><th></th></tr></thead><tbody>';
+      h+='<div class="sec plan"><h3><span class="step'+(c.steps.utilities?" done":"")+'">2</span>Utility responses &amp; plans</h3><div class="tbl"><table><thead><tr><th>Utility</th><th>Response</th><th>Ref / notes</th><th></th></tr></thead><tbody>';
       d.utilities.forEach(function(u,i){
         var cls=u.status==="Pending"?"b-warn":u.status.indexOf("Conflict")===0?"b-bad":"b-ok";
         h+='<tr><td style="min-width:120px"><input type="text" data-u="'+i+'" data-uk="name" value="'+esc(u.name)+'"></td>'+
@@ -319,15 +363,26 @@
           '<td style="min-width:180px"><input type="text" data-u="'+i+'" data-uk="notes" value="'+esc(u.notes)+'" placeholder="'+(u.status.indexOf("Conflict")===0?"How will this be managed? (required)":"Plan ref, contact, mark colour…")+'"></td>'+
           '<td class="no-print"><button class="btn sm danger" data-act="rmUtil" data-i="'+i+'" title="Remove">✕</button></td></tr>';
       });
-      h+='</tbody></table></div><button class="btn sm no-print" style="margin-top:8px" data-act="addUtil">+ Add utility</button></div>';
+      h+='</tbody></table></div><button class="btn sm no-print" style="margin-top:8px" data-act="addUtil">+ Add utility</button>';
+      h+='<h4 style="font-size:14px;margin-top:16px">Dial Before You Dig plans &amp; maps for '+esc(j.address||"this site")+'</h4>'+
+         '<p class="hint">Attach the plan PDFs / maps each utility sent back for this address, or photos of them. At least one is required.</p>';
+      if(!locked) h+='<label class="drop no-print" id="dropZone" style="display:block;margin-top:8px;cursor:pointer">📎 Tap to attach PDFs or photos, or drop files here'+
+         '<input type="file" id="attachInput" multiple accept="application/pdf,image/*" hidden></label>';
+      h+='<div class="atts">'+d.attachments.map(function(a){
+        var img=a.type.indexOf("image/")===0;
+        return '<div class="att"><div class="th" data-act="viewAtt" data-id="'+a.id+'" title="Open">'+(img?'<img data-thumb="'+a.id+'" alt="">':'📄')+'</div>'+
+          '<div class="nm" title="'+esc(a.name)+'">'+esc(a.name)+'</div><div class="sub">'+kb(a.size)+'</div>'+
+          '<select data-att="'+a.id+'"><option value="">All utilities</option>'+d.utilities.map(function(u){return '<option value="'+u.id+'"'+(u.id===a.utilityId?" selected":"")+'>'+esc(u.name||"(unnamed)")+'</option>';}).join("")+'</select>'+
+          '<div class="row no-print"><button class="btn sm" data-act="viewAtt" data-id="'+a.id+'">Open</button>'+(locked?'':'<button class="btn sm danger" data-act="rmAtt" data-id="'+a.id+'">✕</button>')+'</div></div>';
+      }).join("")+'</div></div>';
 
       // Step 3 safety
-      h+='<div class="sec"><h3><span class="step'+(c.steps.safety?" done":"")+'">3</span>Safe-dig checklist</h3>';
+      h+='<div class="sec plan"><h3><span class="step'+(c.steps.safety?" done":"")+'">3</span>Safe-dig checklist</h3>';
       SAFETY.forEach(function(s){ var on=!!d.safety[s[0]]; h+='<label class="chk'+(on?" on":"")+'"><input type="checkbox" data-s="'+s[0]+'"'+(on?" checked":"")+'><span>'+s[1]+'</span></label>'; });
       h+='<label class="f" style="margin-top:8px">Dig plan notes<textarea data-k="dbyd.notes" placeholder="Hazards, spotter, traffic control, anything the crew needs to know">'+esc(d.notes)+'</textarea></label></div>';
 
       // Step 4 sign-off
-      h+='<div class="sec"><h3><span class="step'+(c.steps.signoff?" done":"")+'">4</span>Supervisor sign-off</h3>';
+      h+='<div class="sec plan"><h3><span class="step'+(c.steps.signoff?" done":"")+'">4</span>Supervisor sign-off</h3>';
       if(d.signedAt){
         h+='<p>Signed off by <b>'+esc(d.supervisor)+'</b> on '+new Date(d.signedAt).toLocaleString()+'</p>'+
            (locked?'':'<button class="btn sm no-print" style="margin-top:8px" data-act="unsign">Revoke sign-off</button>');
@@ -360,8 +415,29 @@
     h+='<div class="sec"><h3>Activity</h3><ul class="log">'+j.log.map(function(l){return '<li>'+new Date(l.at).toLocaleString()+' — '+esc(l.msg)+'</li>';}).join("")+'</ul></div>';
     h+='</div>';
     el.innerHTML=h;
-    if(locked) el.querySelectorAll(".sec input:not(#supName), .sec select, .sec textarea").forEach(function(x){ if(x.closest(".sec").querySelector("h3") && !/Job details/.test(x.closest(".sec").querySelector("h3").textContent)) x.disabled=true; });
+    if(locked) el.querySelectorAll(".sec.plan input, .sec.plan select, .sec.plan textarea, .sec.plan button:not([data-act=viewAtt])").forEach(function(x){ x.disabled=true; });
+    el.querySelectorAll("img[data-thumb]").forEach(function(im){ fileUrl(im.dataset.thumb).then(function(u){ if(u) im.src=u; }); });
+    var dz=document.getElementById("dropZone");
+    if(dz){
+      dz.addEventListener("dragover",function(e){ e.preventDefault(); dz.classList.add("over"); });
+      dz.addEventListener("dragleave",function(){ dz.classList.remove("over"); });
+      dz.addEventListener("drop",function(e){ e.preventDefault(); dz.classList.remove("over"); addFiles(j,e.dataTransfer.files); });
+    }
   }
+
+  function clearSign(j){ if(j.dbyd.signedAt && j.status!=="progress" && j.status!=="done"){ j.dbyd.signedAt=""; logIt(j,"Dig plan changed — supervisor sign-off cleared"); } }
+  function addFiles(j,list){
+    var files=Array.prototype.filter.call(list||[],function(f){ return f.type==="application/pdf"||f.type.indexOf("image/")===0; });
+    if(!files.length){ alert("Only PDF and image files can be attached."); return; }
+    Promise.all(files.map(function(f){
+      var id=uid();
+      return putFile({id:id,jobId:j.id,blob:f}).then(function(){
+        j.dbyd.attachments.push({id:id,name:f.name||"photo.jpg",type:f.type,size:f.size,utilityId:"",addedAt:new Date().toISOString()});
+        logIt(j,"Attached plan: "+(f.name||"photo"));
+      });
+    })).then(function(){ clearSign(j); save(); render(); }, function(err){ alert("Couldn't save the file on this device: "+(err&&err.message||err)); save(); render(); });
+  }
+  function removeJobFiles(j){ (j.dbyd.attachments||[]).forEach(function(a){ delFile(a.id).catch(function(){}); }); }
 
   // ---------- events ----------
   function setPath(o,path,v){ var p=path.split("."); while(p.length>1) o=o[p.shift()]; o[p[0]]=v; }
@@ -380,6 +456,8 @@
   det.addEventListener("change",function(e){
     var j=job(ui.sel); if(!j) return; var t=e.target;
     if(t.id==="supName"){ j.dbyd.supervisor=t.value; save(); return; }
+    if(t.id==="attachInput"){ addFiles(j,t.files); return; }
+    if(t.dataset.att){ var at=j.dbyd.attachments.find(function(a){return a.id===t.dataset.att;}); if(at){ at.utilityId=t.value; save(); } return; }
     var planField = t.dataset.s || t.dataset.u || (t.dataset.k && (t.dataset.k.indexOf("dbyd.")===0 || t.dataset.k==="excavation"));
     if(planField && j.dbyd.signedAt && j.status!=="progress" && j.status!=="done"){
       j.dbyd.signedAt=""; logIt(j,"Dig plan changed — supervisor sign-off cleared");
@@ -409,7 +487,10 @@
     var b=e.target.closest("[data-act]"); if(!b) return; var j=job(ui.sel); if(!j) return; var a=b.dataset.act;
     if(a==="back"){ ui.sel=null; }
     else if(a==="print"){ window.print(); return; }
-    else if(a==="delete"){ if(!confirm("Delete job "+j.num+"?")) return; db.jobs=db.jobs.filter(function(x){return x!==j;}); ui.sel=null; }
+    else if(a==="viewAtt"){ var w=window.open("","_blank"); fileUrl(b.dataset.id).then(function(u){ if(!u){ if(w) w.close(); alert("File not found on this device."); return; } if(w) w.location=u; else location.href=u; }); return; }
+    else if(a==="rmAtt"){ var at=j.dbyd.attachments.find(function(x){return x.id===b.dataset.id;}); if(!at||!confirm("Remove "+at.name+"?")) return;
+      j.dbyd.attachments=j.dbyd.attachments.filter(function(x){return x!==at;}); delFile(at.id).catch(function(){}); logIt(j,"Removed plan: "+at.name); clearSign(j); }
+    else if(a==="delete"){ if(!confirm("Delete job "+j.num+"?")) return; removeJobFiles(j); db.jobs=db.jobs.filter(function(x){return x!==j;}); ui.sel=null; }
     else if(a==="addUtil"){ j.dbyd.utilities.push({id:uid(),name:"",status:"Pending",ref:"",notes:""}); if(j.dbyd.signedAt){ j.dbyd.signedAt=""; logIt(j,"Dig plan changed — supervisor sign-off cleared"); } }
     else if(a==="rmUtil"){ var u=j.dbyd.utilities.splice(+b.dataset.i,1)[0]; logIt(j,"Removed utility "+(u.name||"(unnamed)")); if(j.dbyd.signedAt){ j.dbyd.signedAt=""; logIt(j,"Dig plan changed — supervisor sign-off cleared"); } }
     else if(a==="sign"){ var n=(document.getElementById("supName").value||"").trim(); if(!n){ alert("Enter the supervisor's name to sign off."); return; } j.dbyd.supervisor=n; j.dbyd.signedAt=new Date().toISOString(); logIt(j,"Dig plan signed off by "+n); }
@@ -428,6 +509,7 @@
   var dlg=document.getElementById("settingsDlg");
   document.getElementById("settingsBtn").onclick=function(){
     document.getElementById("setWait").value=db.settings.waitDays;
+    document.getElementById("setLodge").value=db.settings.lodgeUrl||"";
     document.getElementById("setValid").value=db.settings.validDays;
     document.getElementById("setCrews").value=db.settings.crews.join("\n");
     document.getElementById("setUtils").value=db.settings.utilities.join("\n");
@@ -438,19 +520,33 @@
     function lines(id){ return document.getElementById(id).value.split("\n").map(function(s){return s.trim();}).filter(Boolean); }
     db.settings.waitDays=Math.max(0,parseInt(document.getElementById("setWait").value,10)||0);
     db.settings.validDays=Math.max(1,parseInt(document.getElementById("setValid").value,10)||28);
+    var lu=document.getElementById("setLodge").value.trim(); if(lu && !/^https?:\/\//i.test(lu)) lu="https://"+lu; db.settings.lodgeUrl=lu;
     db.settings.crews=lines("setCrews"); db.settings.utilities=lines("setUtils");
     save(); dlg.close(); render();
   };
 
   // export / import
+  function b64(blob){ return new Promise(function(res){ var r=new FileReader(); r.onload=function(){ res(String(r.result).split(",")[1]||""); }; r.readAsDataURL(blob); }); }
   document.getElementById("exportBtn").onclick=function(){
-    var blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"});
+    allFiles().catch(function(){ return []; }).then(function(recs){
+      return Promise.all((recs||[]).map(function(r){ return b64(r.blob).then(function(data){ return {id:r.id,jobId:r.jobId,type:r.blob.type,data:data}; }); }));
+    }).then(function(files){ doExport(Object.assign({},db,{files:files})); });
+  };
+  function doExport(out){
+    var blob=new Blob([JSON.stringify(out)],{type:"application/json"});
     var a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="dispatch-"+iso(new Date())+".json"; a.click();
     setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
-  };
+  }
   document.getElementById("importFile").onchange=function(e){
     var f=e.target.files[0]; if(!f) return; var r=new FileReader();
-    r.onload=function(){ try{ var d=JSON.parse(r.result); if(!d.jobs||!d.settings) throw 0; if(!confirm("Replace all current jobs with "+d.jobs.length+" imported jobs?")) return; db=d; ui.sel=null; save(); render(); }catch(err){ alert("That file isn't a valid dispatch export."); } };
+    r.onload=function(){ try{ var d=JSON.parse(r.result); if(!d.jobs||!d.settings) throw 0; if(!confirm("Replace all current jobs with "+d.jobs.length+" imported jobs?")) return; var files=d.files||[]; delete d.files;
+      d.jobs.forEach(function(j){ if(!j.dbyd.attachments) j.dbyd.attachments=[]; });
+      if(d.settings.lodgeUrl==null) d.settings.lodgeUrl=defaults.settings.lodgeUrl;
+      clearFiles().then(function(){ return Promise.all(files.map(function(f){
+        var bin=atob(f.data), u=new Uint8Array(bin.length); for(var i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i);
+        return putFile({id:f.id,jobId:f.jobId,blob:new Blob([u],{type:f.type})});
+      })); }).then(render).catch(function(){ alert("Jobs imported, but some attachments couldn't be restored."); });
+      urlCache={}; db=d; ui.sel=null; save(); render(); }catch(err){ alert("That file isn't a valid dispatch export."); } };
     r.readAsText(f); e.target.value="";
   };
 

@@ -37,8 +37,13 @@ plan is complete:
 1. **Locate request** – ticket number, date requested, and dig area. The
    earliest legal dig date (default +2 business days) and ticket expiry
    (default 28 days) are calculated automatically and can be overridden.
-2. **Utility owner responses** – every utility must be Marked or Clear; a
-   Conflict needs notes on how it will be managed.
+2. **Utility responses & plans** – every utility must be Marked or Clear (a
+   Conflict needs notes on how it will be managed), and at least one Dial
+   Before You Dig plan/map for the site (PDF or photo) must be attached. Each
+   file can be tagged to the utility it came from. Attachments are stored in
+   the browser's IndexedDB and are included in Export/Import. Step 1 also
+   links to the locate enquiry website (set in Settings) and opens the site
+   address in Google Maps.
 3. **Safe-dig checklist** – white-lining, marks verified, plans on site,
    hand-dig in tolerance zone, potholing, crew briefing, emergency plan.
 4. **Supervisor sign-off** – editing the plan afterwards clears the sign-off.
