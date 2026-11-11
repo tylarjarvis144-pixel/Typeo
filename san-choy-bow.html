@@ -214,6 +214,21 @@
   }
   .btn-plain[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
   .note { color: var(--muted); font-size: 0.85rem; margin-top: 10px; }
+
+  .alert {
+    position: fixed; left: 12px; right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    max-width: 616px; margin: 0 auto;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: var(--warm); color: #fff;
+    font-size: 1.2rem; font-weight: 700;
+    padding: 14px 14px 14px 18px;
+    border-radius: 16px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.3);
+    z-index: 10;
+  }
+  .alert[hidden] { display: none; }
+  .alert .btn { background: #fff; color: var(--warm); }
 </style>
 </head>
 <body>
@@ -294,6 +309,11 @@
   <p class="note" id="sr-status" role="status" aria-live="polite"></p>
 </main>
 
+<div class="alert" id="alert" role="alertdialog" aria-labelledby="alert-text" hidden>
+  <span id="alert-text">Time's up!</span>
+  <button class="btn" type="button" id="alert-ok">OK</button>
+</div>
+
 <script>
 (function () {
   "use strict";
@@ -328,17 +348,67 @@
     save(); updateCounts();
   });
 
-  /* ---------- Sound ---------- */
+  /* ---------- Sound ----------
+     Main path: an <audio> element playing a generated WAV. On iPhone this
+     still plays with the silent switch on (Web Audio does not), and it is
+     "unlocked" by playing it silently during the Start tap.
+     Fallback: Web Audio oscillator beeps. */
+  try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
+
+  function makeBeepWav() {
+    var rate = 22050, beeps = 3, on = 0.3, off = 0.15;
+    var n = Math.floor(rate * beeps * (on + off));
+    var buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    function str(o, s) { for (var i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); }
+    str(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); str(8, "WAVE");
+    str(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    str(36, "data"); v.setUint32(40, n * 2, true);
+    for (var i = 0; i < n; i++) {
+      var t = i / rate, p = t % (on + off), s = 0;
+      if (p < on) {
+        var env = Math.min(1, p / 0.01, (on - p) / 0.03);
+        s = Math.sin(2 * Math.PI * 880 * t) * 0.8 * env;
+      }
+      v.setInt16(44 + i * 2, s * 32767, true);
+    }
+    return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+  }
+  var alarm = null;
+  try { alarm = new Audio(makeBeepWav()); alarm.preload = "auto"; } catch (e) { alarm = null; }
+  var alarmUnlocked = false;
+
   var ctx = null;
   function unlockAudio() {
+    if (alarm && !alarmUnlocked) {
+      try {
+        alarm.muted = true;
+        var pr = alarm.play();
+        var done = function () { alarm.pause(); alarm.currentTime = 0; alarm.muted = false; alarmUnlocked = true; };
+        if (pr && pr.then) pr.then(done).catch(function () { alarm.muted = false; }); else done();
+      } catch (e) {}
+    }
     try {
       if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-      if (ctx.state === "suspended") ctx.resume();
+      if (ctx.state !== "running") ctx.resume();
     } catch (e) {}
   }
   function beep() {
+    if (alarm) {
+      try {
+        alarm.muted = false;
+        alarm.currentTime = 0;
+        var pr = alarm.play();
+        if (pr && pr.catch) pr.catch(webBeep);
+        return;
+      } catch (e) {}
+    }
+    webBeep();
+  }
+  function webBeep() {
     if (!ctx) return;
     try {
+      if (ctx.state !== "running") ctx.resume();
       var t = ctx.currentTime;
       for (var i = 0; i < 3; i++) {
         var o = ctx.createOscillator(), g = ctx.createGain();
@@ -356,6 +426,44 @@
   function buzz() {
     try { if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 500]); } catch (e) {}
   }
+
+  /* ---------- "Time's up" banner (works even with no sound/vibration) ---------- */
+  var alertEl = document.getElementById("alert");
+  var alertText = document.getElementById("alert-text");
+  var baseTitle = document.title, flash = null;
+  function showAlert(name) {
+    alertText.textContent = name + " – time's up!";
+    alertEl.hidden = false;
+    var on = false;
+    clearInterval(flash);
+    flash = setInterval(function () { on = !on; document.title = on ? "⏰ Time's up!" : baseTitle; }, 800);
+  }
+  document.getElementById("alert-ok").addEventListener("click", function () {
+    alertEl.hidden = true;
+    clearInterval(flash); document.title = baseTitle;
+    try { if (alarm) { alarm.pause(); alarm.currentTime = 0; } } catch (e) {}
+  });
+
+  /* ---------- Keep screen awake while a timer runs ---------- */
+  var running = 0, timerLock = null;
+  function timerStarted() {
+    running++;
+    if (timerLock || !("wakeLock" in navigator)) return;
+    navigator.wakeLock.request("screen").then(function (l) {
+      timerLock = l; l.addEventListener("release", function () { timerLock = null; });
+    }).catch(function () {});
+  }
+  function timerStopped() {
+    running = Math.max(0, running - 1);
+    if (!running && timerLock) { try { timerLock.release(); } catch (e) {} }
+  }
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden && running && !timerLock && "wakeLock" in navigator) {
+      navigator.wakeLock.request("screen").then(function (l) {
+        timerLock = l; l.addEventListener("release", function () { timerLock = null; });
+      }).catch(function () {});
+    }
+  });
 
   /* ---------- Timers ---------- */
   var status = document.getElementById("sr-status");
@@ -393,7 +501,9 @@
       render();
       el.classList.remove("finished"); void el.offsetWidth; el.classList.add("finished");
       beep(); buzz();
+      showAlert(name);
       status.textContent = name + " timer done.";
+      timerStopped();
     }
     function start() {
       unlockAudio();
@@ -405,14 +515,17 @@
       tick = setInterval(function () { if (left() <= 0) finish(); else render(); }, 200);
       render();
       status.textContent = name + " timer started.";
+      timerStarted();
     }
     function pause() {
       remaining = left();
       state = "paused";
       stopTick(); render();
       status.textContent = name + " timer paused.";
+      timerStopped();
     }
     function reset() {
+      if (state === "running") timerStopped();
       stopTick();
       state = "idle"; remaining = total;
       el.classList.remove("finished");
